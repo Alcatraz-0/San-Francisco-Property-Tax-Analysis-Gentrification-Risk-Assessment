@@ -6,7 +6,7 @@
 
 > **Academic Project** | CS 424 – Visualization & Visual Analytics | University of Illinois Chicago | Fall 2025
 
-**Author:** Anand Meena (ameen4@uic.edu)  
+**Author:** Anand Meena 
 
 ---
 
