@@ -1,0 +1,53 @@
+# Data files (too large for GitHub - use Google Drive)
+data/*.parquet
+data/*.csv
+data/*.pkl
+data/*.json
+*.parquet
+*.csv
+*.pkl
+embeddings_2d.*
+sf_property_data_clean.*
+sf_property_data_geo.geojson
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+
+# Logs
+*.log
+
+# Large demo files
+demo.gif
+demo.png
+
+# Zipped files
+*.zip
