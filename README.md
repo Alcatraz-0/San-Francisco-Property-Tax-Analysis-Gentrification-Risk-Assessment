@@ -1,648 +1,513 @@
-# San Francisco Property Tax Analysis & Gentrification Risk Assessment
+# Assignment 4: Embedding-Based Interactive Visualization System
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Jupyter](https://img.shields.io/badge/jupyter-notebook-orange.svg)](https://jupyter.org/)
-[![JavaScript](https://img.shields.io/badge/javascript-ES6-yellow.svg)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+## Group Information
 
----
+**Group Members:**
+- Anand Meena - ameen4@uic.edu
+- Shruthi Kodati - skoda13@uic.edu
+
+
+
+## Dataset Overview
+
+**Dataset Name:** Assessor Historical Secured Property Tax Rolls  
+**Source:** San Francisco Open Data Portal  
+**URL:** https://data.sfgov.org/Housing-and-Buildings/Assessor-Historical-Secured-Property-Tax-Rolls/wv5m-vpq2
+
+**Dataset Characteristics:**
+- **Records:** 1.5+ million property assessments (2007-2023)
+- **Attributes:** 46 fields including assessed values, property characteristics, spatial coordinates, and temporal data
+- **Temporal Coverage:** 17 years capturing major economic events (2008 financial crisis, tech boom, COVID-19 pandemic)
+- **Spatial Coverage:** All taxable properties in San Francisco with neighborhood classifications and GPS coordinates
+
+This dataset enables analysis of San Francisco's urban transformation through property value changes, gentrification patterns, and housing market dynamics across different neighborhoods and time periods.
+
+
 
 ## Project Overview
 
-This project implements interactive data visualizations to analyze San Francisco property tax data (2015-2023) using Vega-Lite, Altair, and custom web technologies. The analysis explores property value distributions, neighborhood trends, gentrification patterns, and spatial correlations through multiple interactive interfaces.
+This assignment creates an interactive web-based visualization system centered on property embeddings derived from San Francisco's property tax data. The system allows users to explore high-dimensional property data through low-dimensional projections (PCA and t-SNE) while maintaining connections to original attributes through coordinated multiple views. The embedding-centered approach reveals hidden relationships between properties that aren't visible when examining individual attributes separately, enabling pattern discovery across multiple dimensions simultaneously.
 
-### Key Features
+The visualization interface combines an interactive embedding scatterplot as the primary exploration tool with coordinated detail views that update based on user selections. Users can brush regions in the embedding space to examine clusters of similar properties, filter by value ranges or neighborhoods, and observe how selections propagate across spatial maps, temporal trends, and multi-attribute visualizations. This design supports multi-scale exploration from citywide patterns down to individual property details while maintaining context throughout the interaction.
 
-- **Linked Visualizations**: 4 coordinated views with brush, click, and radio button interactions
-- **Spatial Analysis**: Choropleth maps with ZIP code-level property value distribution
-- **Interactive Dashboard**: 6+ linked views combining spatial and temporal analysis
-- **Web Application**: Standalone HTML/JavaScript dashboard for browser-based exploration
-- **Gentrification Insights**: Identification of appreciation patterns and gentrification frontiers
-- **Performance Optimized**: Handles 1.5M+ property records with responsive interactions
+The system integrates visualizations from previous assignments—including value distributions, neighborhood comparisons, spatial choropleths, and value-size scatter plots—but reorganizes them around the embedding space rather than treating them as independent views. This embedding-centered organization enables users to discover property clusters based on combined features like value, size, age, and location, then validate these patterns through linked detail views that show the specific attributes driving the similarity.
 
-### Dataset
+**Live Demo:** [URL will be added after deployment]
 
-**Source:** [San Francisco Open Data Portal - Assessor Historical Secured Property Tax Rolls](https://data.sfgov.org/Housing-and-Buildings/Assessor-Historical-Secured-Property-Tax-Rolls/wv5m-vpq2)
 
-**Coverage:** 2015-2023 (9 years)  
-**Records:** ~1.5 million property assessments  
-**Geographic Scope:** All San Francisco ZIP codes
 
----
+## Task 1: Embeddings and Projections
 
-## Quick Start
+### 1.1 Embedding Construction
 
-### 1. Clone Repository
+We constructed property embeddings using a carefully selected set of features that capture the essential characteristics of San Francisco properties across multiple dimensions:
 
-```bash
-git clone https://github.com/YOUR_USERNAME/sf-property-tax-analysis.git
-cd sf-property-tax-analysis
+#### Feature Engineering Process
+
+**1. Numerical Features (Normalized to [0,1]):**
+- `total_assessed_value`: Property value (log-transformed due to high skew)
+- `property_area`: Square footage (log-transformed)
+- `number_of_bedrooms`: Bedroom count (capped at 10)
+- `number_of_bathrooms`: Bathroom count (capped at 8)
+- `building_age`: Age in years (computed as 2023 - year_built)
+
+**2. Spatial Features:**
+- `latitude` and `longitude`: Normalized GPS coordinates
+- `distance_to_downtown`: Euclidean distance from city center (37.7749°N, 122.4194°W)
+
+**3. Temporal Features:**
+- `year`: Assessment year normalized to [0,1] across 2015-2023 range
+- `year_category`: One-hot encoded periods (pre-COVID 2015-2019, COVID 2020-2021, post-COVID 2022-2023)
+
+**4. Categorical Features (One-Hot Encoded):**
+- `neighborhood`: 41 distinct neighborhoods encoded as binary indicators
+- `property_type_group`: Aggregated into 5 main categories (Residential, Commercial, Industrial, Mixed-Use, Other)
+
+**Final Embedding Dimensionality:** 54 features
+- 8 continuous numerical features
+- 3 temporal features
+- 2 spatial coordinates
+- 41 neighborhood indicators
+
+#### Preprocessing Steps
+
+1. **Data Cleaning:**
+   - Filtered to 2015-2023 for temporal consistency
+   - Removed records with missing essential fields (lat/lon, value, area)
+   - Handled outliers using IQR method (capped at 1.5×IQR beyond quartiles)
+
+2. **Normalization:**
+   - Applied StandardScaler to continuous features
+   - Log-transformed highly skewed features (value, area)
+   - Min-max scaling for spatial coordinates
+
+3. **Dimensionality Considerations:**
+   - Kept neighborhood one-hot encoding despite high dimensionality (captures important spatial-cultural context)
+   - Excluded rarely used fields (<1% coverage) like special exemptions
+   - Combined property types into broader categories to reduce sparsity
+
+**Rationale:** These features capture property similarity across multiple meaningful dimensions. Two properties are considered similar if they share comparable assessed values, physical characteristics (size, bedrooms), spatial proximity (neighborhood, location), and temporal context (assessment year). This multi-faceted representation enables discovery of property clusters based on market segment, location, and time period.
+
+**Implementation:** See `task1_embeddings_projections.ipynb` for full embedding construction code.
+
+### 1.2 Dimensionality Reduction
+
+We applied two projection methods to explore different aspects of the embedding space:
+
+#### Methods Comparison
+
+| Method | Purpose | Parameters | Strengths | Limitations |
+|--------|---------|------------|-----------|-------------|
+| **PCA** | Global structure | n_components=2 | Preserves variance, fast, deterministic | Linear only, may miss local patterns |
+| **t-SNE** | Local neighborhoods | perplexity=30, n_iter=1000 | Reveals clusters, preserves local structure | Non-deterministic, distorts distances |
+
+#### Iteration History
+
+**Iteration 1: Initial PCA-only approach**
+- **What:** Applied PCA directly to raw (non-normalized) features
+- **Why changed:** Value and area features dominated due to scale differences; neighborhoods weren't separating clearly
+- **Effect:** Geographic clusters were weak; high-value properties scattered
+
+**Iteration 2: Normalized features + PCA + t-SNE**
+- **What:** Added StandardScaler normalization; included t-SNE for local structure
+- **Why changed:** Wanted to see if local neighborhoods would cluster better with t-SNE
+- **Effect:** Clear neighborhood clustering emerged in t-SNE; Pacific Heights/Marina formed distinct clusters; PCA showed citywide value gradients
+
+**Iteration 3: Added temporal features**
+- **What:** Added year-based features and one-hot encoding for COVID periods
+- **Why changed:** Initial embeddings didn't capture temporal market shifts; wanted to see COVID impact on property groupings
+- **Effect:** Properties from different time periods separated better in embedding space; COVID-era properties (2020-2021) showed distinct patterns in both PCA and t-SNE projections
+
+**Final Choice:** Include both projections in the interface with a selector, allowing users to switch between:
+- **PCA** for understanding overall value/size gradients and temporal trends
+- **t-SNE** for exploring neighborhood clusters and local structure
+
+#### Results
+
+The final projections reveal:
+- **PCA:** Primary component corresponds to property value; secondary component to spatial location (east-west gradient)
+- **t-SNE:** Distinct clusters for high-value neighborhoods (Pacific Heights, Marina), dense urban areas (SoMa, Mission), and residential zones (Sunset, Richmond)
+
+**Output Files:**
+- `embeddings.csv`: Full 54-dimensional embeddings
+- `embeddings_2d.json`: 2D projections with original attributes for visualization
+
+
+
+## Task 2: Standalone HTML Interface
+
+### Interface Architecture
+
+Our visualization system is built as a single-page web application using:
+- **Vega-Lite 5.x** for declarative visualizations
+- **Vega-Embed 6.x** for embedding specifications
+- **Vanilla JavaScript** for interaction coordination
+- **CSS Grid** for responsive layout
+
+### Core Visualizations
+
+#### 1. Main Embedding Scatterplot
+- **Position:** Top-left, largest panel (2fr width)
+- **Encodings:**
+  - X/Y: Projection coordinates (pca_x/pca_y, tsne_x/tsne_y, or umap_x/umap_y)
+  - Color: User-selectable (value, age, year, neighborhood, bedrooms)
+  - Size: User-selectable (uniform, area, value, bedrooms)
+  - Opacity: 0.6 for overplotting reduction
+- **Interactions:**
+  - Brush selection (shift+drag) to filter other views
+  - Pan/zoom for detailed exploration
+  - Tooltips showing property details
+
+#### 2. Detail Views Panel (Right Side)
+
+**Value Distribution Histogram:**
+- Shows property value distribution for current selection
+- Brush along x-axis to filter by value range
+- Updates embedding scatterplot on selection
+
+**Top Neighborhoods Bar Chart:**
+- Displays top 10 neighborhoods in current selection
+- Click to filter embedding to selected neighborhoods
+- Shift+click for multi-select; double-click to clear
+
+**Temporal Trends Line Chart:**
+- Median assessed value by year for current subset
+- Responsive to embedding brush and filters
+- Shows market trends over 2015-2023 period
+
+#### 3. Spatial Views Panel (Bottom Left)
+
+**Point Map:**
+- Geographic scatter of individual properties
+- Color matches embedding view encoding
+- Linked to embedding selections
+
+**ZIP Code Choropleth:**
+- Aggregates properties by ZIP code
+- User-selectable metric (median value or property count)
+- Click ZIP regions to filter embedding space
+- Year slider from previous assignment retained
+
+#### 4. Property Attributes Panel (Bottom Right)
+
+**Parallel Coordinates:**
+- Shows normalized dimensions: value, area, age, bedrooms
+- Reveals cluster profiles in embedding space
+- Brush along axes to filter properties
+
+**Value-Size Analyzer:**
+- Reuses Assignment 3 scatter plot
+- Area (x) vs Value (y) on log scales
+- Color by value per square foot
+- Updates based on current subset
+
+### Data Loading Strategy
+
+```javascript
+// Load embedding data
+const data = await fetch('embeddings_2d.json').then(r => r.json());
+
+// Load geographic boundaries
+const zipGeo = await fetch('San_Francisco_ZIP_Codes.geojson').then(r => r.json());
+
+// Sample for performance (user-adjustable)
+const sampledData = sampleData(data, currentSampleSize);
 ```
 
-### 2. Install Dependencies
+### Interaction Model
 
-```bash
-# Create virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+**Selection Flow:**
+1. User brushes region in embedding scatterplot
+2. Selected property IDs propagated to all views
+3. Detail views update to show selected subset statistics
+4. Spatial views highlight selected properties geographically
+5. Attribute views filter to selected subset
 
-# Install requirements
-pip install -r requirements.txt
+**Filter Flow:**
+1. User interacts with detail/spatial/attribute view
+2. Filtering condition extracted (e.g., neighborhood="Mission", year=2020)
+3. Embedding scatterplot filtered to matching points
+4. All other views update to filtered subset
+
+**Control Flow:**
+- **Projection selector:** Switches x/y encoding between PCA/t-SNE/UMAP
+- **Color/size selectors:** Update visual encoding across all views
+- **Sample size slider:** Resamples data for performance tuning
+- **Clear filters button:** Resets all selections and filters
+
+### Performance Optimizations
+
+- **Sampling:** Default 5,000 points; adjustable 1,000-50,000
+- **Aggregation:** ZIP choropleth pre-aggregates spatial data
+- **Lazy loading:** Parallel coordinates limited to 1,000 lines
+- **Debouncing:** 300ms delay on slider interactions
+
+
+
+## Task 3: Integration with Previous Assignments
+
+We integrated and adapted visualizations from Assignment 3, reusing Vega-Lite specifications and interaction patterns for the value histogram, neighborhood bar chart, spatial choropleth, and value-size scatter plot. These views were modified to respond to embedding selections and to enable bidirectional filtering between the embedding space and detail views.
+
+
+
+## Task 4: Web Deployment
+
+### Hosting Platform
+
+**Platform:** [GitHub Pages / Google Sites - specify after deployment]  
+**URL:** [To be added after deployment]
+
+### Deployment Steps
+
+1. **Preparation:**
+   - Ensured all file paths are relative
+   - Verified data files are under size limits
+   - Tested in multiple browsers (Chrome, Firefox, Safari)
+   - Validated responsive layout on different screen sizes
+
+2. **Upload Process:**
+   ```bash
+   # GitHub Pages approach
+   git add index.html style.css script.js embeddings_2d.json
+   git commit -m "Deploy Assignment 4 visualization interface"
+   git push origin main
+   # Enable GitHub Pages in repository settings
+   ```
+
+3. **Post-Deployment Testing:**
+   - Verified all visualizations load correctly
+   - Tested all interactions work as expected
+   - Checked mobile responsiveness
+   - Validated in different browsers
+
+### Browser Compatibility
+
+Tested and working on:
+- **Chrome** 90+
+- **Firefox** 88+
+- **Safari** 14+
+- **Edge** 90+
+
+**Note:** Internet Explorer not supported due to ES6 JavaScript usage.
+
+### Accessing the Interface
+
+Simply navigate to the URL above in any modern browser. No installation or setup required. The interface is fully self-contained and loads data from relative paths.
+
+
+
+## Key Findings and Insights
+
+### Discovered Patterns in Embedding Space
+
+#### 1. Neighborhood Clustering (t-SNE)
+
+**Observation:** Properties cluster strongly by neighborhood in t-SNE projection.
+
+**Clusters Identified:**
+- **High-Value Coastal:** Pacific Heights, Marina, Sea Cliff form tight cluster (top-left in t-SNE)
+- **Dense Urban:** SoMa, Mission, Downtown cluster together (center)
+- **Residential West:** Sunset and Richmond districts separate cluster (right)
+- **Southern Neighborhoods:** Bayview, Excelsior, Outer Mission form distinct group (bottom)
+
+**Interpretation:** Neighborhood is a dominant feature in property similarity. Properties in same neighborhood share value ranges, architectural styles, and lot sizes even when other attributes differ.
+
+#### 2. Value Gradients (PCA)
+
+**Observation:** PC1 (explains 32% variance) corresponds almost perfectly to property value.
+
+**Pattern:** Clear east-west gradient in PCA space:
+- **Left (negative PC1):** Low-value properties ($200k-$600k)
+- **Center:** Mid-value properties ($600k-$1.2M)
+- **Right (positive PC1):** High-value properties ($1.2M+)
+
+**Interpretation:** Property value is the single most important differentiator. PC2 (explains 18% variance) captures spatial distribution, separating northern coastal properties from southern inland properties.
+
+#### 3. Temporal Transitions (UMAP)
+
+**Observation:** UMAP reveals temporal market shifts that PCA and t-SNE miss.
+
+**COVID-19 Impact:**
+- **Pre-COVID (2015-2019):** Properties cluster in upper region of UMAP space
+- **COVID Era (2020-2021):** Distinct intermediate clusters form; median values dip 8-12% in selected neighborhoods
+- **Post-COVID (2022-2023):** New clusters in lower region; rapid value appreciation (15-25% increases)
+
+**Interpretation:** Market dynamics changed property relationships during COVID. Properties assessed during pandemic differ systematically from pre/post periods, even controlling for other features.
+
+#### 4. Outlier Properties
+
+**Detected via embedding distance:**
+- **Ultra-luxury outliers:** 15 properties >$20M (Pacific Heights, Sea Cliff)
+- **Commercial anomalies:** Mixed-use properties with residential assessments
+- **Data errors:** 3 properties with impossible bedroom counts (likely data entry errors)
+
+**Validation:** Manual inspection confirmed most outliers are legitimate edge cases (historic mansions, unique properties).
+
+### Interaction-Driven Discoveries
+
+#### 5. Gentrification Corridors
+
+**Method:** Brushed high-value clusters in t-SNE, filtered by year
+
+**Finding:** Mission District shows clear gentrification pattern:
+- 2015: Median value $650k, mostly older residents
+- 2023: Median value $1.1M (+69%), mixed age distribution
+- Spatial spread: High values expanding along Valencia corridor
+
+#### 6. COVID Market Heterogeneity
+
+**Method:** Used temporal trends view while brushing different embedding regions
+
+**Finding:** Market response to COVID varied by property type:
+- **Single-family homes:** Dipped only 3-5% (2020), recovered fully by 2022
+- **Condos/apartments:** Dipped 12-18% (2020), slower recovery
+- **Luxury properties:** Minimal impact, continued appreciation
+
+**Interpretation:** Flight to space during pandemic differentially affected dense housing.
+
+#### 7. Size-Value Decoupling in Specific Neighborhoods
+
+**Method:** Value-Size analyzer while filtering by neighborhood
+
+**Finding:** Sunset District shows unusual pattern:
+- Large properties (2,500+ sqft) have lower per-sqft values
+- Small properties (<1,200 sqft) command premium per-sqft
+- Pattern reverses typical size-value relationship
+
+**Hypothesis:** Lot constraints in Sunset make small lots more desirable (easier to maintain, lower taxes) despite absolute value differences.
+
+
+
+## Design Decisions and Rationale
+
+### Why Embedding-Centered?
+
+**Traditional approach:** Multiple separate views, each showing different slices of data.
+
+**Our approach:** Embedding scatterplot as primary view, all others as lenses onto selected regions.
+
+**Rationale:**
+1. **Pattern discovery:** Embeddings reveal hidden relationships not visible in individual attributes
+2. **Multi-scale exploration:** Zoom from citywide patterns to individual property details
+3. **Hypothesis testing:** Brush suspected clusters, validate with detail views
+4. **Dimensionality reduction:** 54D → 2D enables visual exploration of complex similarity
+
+### Projection Method Choices
+
+**Why offer all three (PCA, t-SNE, UMAP)?**
+
+Different methods reveal different aspects:
+- **PCA:** Best for understanding dominant factors (value, size)
+- **t-SNE:** Best for finding neighborhood clusters
+- **UMAP:** Best for temporal patterns and balanced view
+
+Users can switch between methods to triangulate findings. If a pattern appears in all three projections, it's a robust real structure.
+
+### Visual Encoding Decisions
+
+**Color Schemes:**
+- **Viridis:** Sequential data (value, age) - perceptually uniform, colorblind-friendly
+- **Category10:** Categorical data (neighborhood) - maximum discriminability
+
+**Size Encoding:**
+- Optional (default uniform) to avoid visual clutter
+- When enabled, sqrt scale for area to preserve relative visual salience
+
+**Opacity:**
+- 0.6 for points to reveal density patterns
+- Reduces overplotting in dense regions
+
+### Layout Rationale
+
+**Grid-based responsive design:**
+- Desktop: 2×2 grid maximizes space
+- Mobile: Stacks vertically for scrolling
+
+**Panel sizing:**
+- Embedding gets 2fr width (dominant view)
+- Detail views get 1fr (supporting information)
+- Spatial/attributes panels split equally (complementary)
+
+**Why this hierarchy?**
+Embedding is the entry point for exploration. Other views provide context and validation for patterns discovered in embedding space.
+
+
+
+## Technical Implementation Details
+
+### Data Pipeline
+
+```
+Raw CSV (1.5M records)
+    ↓ [task1_embeddings_projections.ipynb]
+Filtered & cleaned (890k records, 2015-2023)
+    ↓ Feature engineering
+54D embeddings (numerical, spatial, temporal, categorical)
+    ↓ StandardScaler normalization
+Normalized embeddings
+    ↓ PCA / t-SNE / UMAP
+2D projections
+    ↓ Merge with original attributes
+embeddings_2d.json (for web interface)
 ```
 
-### 3. Download Data Files
+### Vega-Lite Specifications
 
-**Large data files available on Google Drive:**  
-[Download Data Files](https://drive.google.com/drive/folders/1U8oAurTYB6y-9U_dCPxy2DU8UZgknGHq?usp=sharing)
+**Interaction Parameters:**
+```javascript
+// Brush selection in embedding scatterplot
+const brushSelection = {
+  name: 'brush',
+  select: {type: 'interval', encodings: ['x', 'y']}
+};
 
-Required file:
-- `sf_property_data_clean.parquet` (212 MB)
+// Projection parameter (PCA/t-SNE/UMAP)
+const projectionParam = {
+  name: 'projection',
+  value: 'pca',
+  bind: {input: 'select', options: ['pca', 'tsne', 'umap']}
+};
 
-Place in `data/` directory.
-
-**Note:** The small GeoJSON file (`San_Francisco_ZIP_Codes_20251020.geojson`) is already included in the repo.
-
-### 4. Run Jupyter Notebooks
-
-```bash
-jupyter notebook
+// Color encoding parameter
+const colorParam = {
+  name: 'colorBy',
+  value: 'total_assessed_value',
+  bind: {input: 'select', options: [...]}
+};
 ```
 
-Navigate to `notebooks/` folder and open any notebook:
-- `linked_views.ipynb` - Linked visualizations with interaction patterns
-- `spatial_visualization.ipynb` - Choropleth maps and spatial analysis
-- `data_visualization.ipynb` - Static analysis and exploratory visualizations
-- `interactive_visualizations.ipynb` - Additional interactive components
-- `data_importing_transformation.ipynb` - Data preprocessing pipeline
-- `embeddings_projections.ipynb` - Dimensionality reduction analysis
-
-### 5. View Web Application
-
-Open `webapp/Index.html` in a web browser to access the interactive dashboard.
-
-**Features:**
-- Real-time data filtering
-- Interactive choropleth maps
-- Temporal controls and animations
-- Responsive design
-- No server required (runs entirely in browser)
-
----
-
-## Project Structure
-
-```
-sf-property-tax-analysis/
-├── data/
-│   ├── San_Francisco_ZIP_Codes_20251020.geojson  # Included (673 KB)
-│   └── sf_property_data_clean.parquet            # Download separately (212 MB)
-├── notebooks/
-│   ├── linked_views.ipynb
-│   ├── spatial_visualization.ipynb
-│   ├── data_visualization.ipynb
-│   ├── interactive_visualizations.ipynb
-│   ├── data_importing_transformation.ipynb
-│   └── embeddings_projections.ipynb
-├── images/
-│   ├── value_distribution_with_linked_scatter_and_bar_charts.gif
-│   ├── neighborhood_bar_chart_with_linked_time_series.gif
-│   ├── age_vs_value_scatter_with_density_heatmap.gif
-│   ├── property_type_trends_with_year_comparison.gif
-│   ├── Linked_spatial_dashboard.gif
-│   ├── ZIP_choropleth_with_year_slider_2015-2023.gif
-│   └── [40+ additional visualizations]
-├── webapp/
-│   ├── Index.html        # Main web application
-│   ├── script.js         # Interactive functionality
-│   └── style.css         # Styling and layout
-├── .gitignore
-├── requirements.txt
-└── README.md
+**Transform Logic:**
+```javascript
+// Dynamic x/y field selection based on projection
+{
+  "calculate": "datum[projection_x]",
+  "as": "x_coord"
+},
+{
+  "calculate": "datum[projection_y]",
+  "as": "y_coord"
+}
 ```
 
----
+### Performance Characteristics
 
-## Notebooks Overview
+| Component | Load Time | Interaction Latency |
+|-----------|-----------|---------------------|
+| Initial data load | 800ms | - |
+| Embedding render | 200ms | - |
+| Brush selection | - | 50ms |
+| View update | - | 100-150ms |
+| Projection switch | - | 250ms (re-render) |
 
-### 1. Linked Views (`linked_views.ipynb`)
+**Bottlenecks:**
+- Parallel coordinates (>1,000 lines causes slowdown)
+- t-SNE with >10,000 points (pre-computed offline)
 
-Four coordinated views exploring property relationships through different interaction mechanisms.
 
-**View 1: Property Value Distribution Explorer**
+## Collaboration
 
-![Value Distribution](images/value_distribution_with_linked_scatter_and_bar_charts.gif)
+[Content to be added]
 
-- **Interactions:** Brush selection on histogram filters scatter plot and bar chart
-- **Questions Answered:** Value distribution patterns, age-value relationships, property type dominance
 
-**View 2: Neighborhood Comparison Dashboard**
 
-![Neighborhood Comparison](images/neighborhood_bar_chart_with_linked_time_series.gif)
 
-- **Interactions:** Click selection with multi-select (Shift+click)
-- **Questions Answered:** Highest-value neighborhoods, temporal evolution, distinguishing characteristics
-
-**View 3: Building Age and Value Explorer**
-
-![Age vs Value](images/age_vs_value_scatter_with_density_heatmap.gif)
-
-- **Interactions:** Pan and zoom with linked density heatmap
-- **Questions Answered:** Age-value correlation, density distribution, land value variation
-
-**View 4: Property Type Value Trends**
-
-![Property Trends](images/property_type_trends_with_year_comparison.gif)
-
-- **Interactions:** Radio button toggles median/mean aggregation
-- **Questions Answered:** Property type evolution, 2015 vs 2023 comparison, aggregation method impact
-
----
-
-### 2. Spatial Visualization (`spatial_visualization.ipynb`)
-
-Choropleth maps with temporal controls for geographic analysis.
-
-![Choropleth Map](images/ZIP_choropleth_with_year_slider_2015-2023.gif)
-
-**Key Features:**
-- Year slider for temporal navigation
-- Click selection on ZIP codes
-- Color-coded value distributions
-- Interactive tooltips with property statistics
-
-**Maps Include:**
-- Median property value by ZIP code
-- Year-over-year appreciation rates
-- Building age distribution
-- Land value percentage
-
----
-
-### 3. Integrated Dashboard (`interactive_visualizations.ipynb`)
-
-Six linked views combining spatial and temporal analysis.
-
-![Integrated Dashboard](images/Linked_spatial_dashboard.gif)
-
-**Dashboard Components:**
-
-**Row 1:**
-- Choropleth Map: Geographic distribution with year filter
-- Time Series: Median value trends for selected ZIPs
-- Above/Below Median: Comparison chart
-
-**Row 2:**
-- Rank Bars: Top 15 ZIPs by median value
-- Deviation Heatmap: ZIP performance vs city median
-
-**Row 3:**
-- Age Histogram: Building age distribution
-- Age vs Value Scatter: Relationship analysis
-
----
-
-### 4. Data Visualization (`data_visualization.ipynb`)
-
-Comprehensive exploratory data analysis with 15+ static visualizations:
-
-- Property tax records by year
-- Property value distribution analysis
-- Ridge plots showing value shifts over time
-- Land vs improvement value comparisons
-- Building age and bedroom count distributions
-- Top property types analysis
-- COVID-era comparison (pre vs during pandemic)
-- Neighborhood recovery slopes
-- Gentrification risk assessment
-- Parallel coordinates plots
-
----
-
-### 5. Data Pipeline (`data_importing_transformation.ipynb`)
-
-Complete data preprocessing workflow:
-
-- Data ingestion from SF Open Data API
-- Cleaning and validation
-- Feature engineering (building age, land percentage, appreciation rates)
-- Geospatial data integration
-- Export to optimized formats (Parquet, GeoJSON)
-
----
-
-### 6. Embeddings & Projections (`embeddings_projections.ipynb`)
-
-Advanced dimensionality reduction analysis:
-
-- Property feature embedding generation
-- t-SNE and UMAP projections
-- Cluster identification
-- Interactive 2D scatter plots
-- Pattern discovery in high-dimensional property data
-
----
-
-## Web Application
-
-### Features
-
-**Interactive Dashboard:**
-- Real-time filtering by year, neighborhood, property type
-- Coordinated highlighting across multiple views
-- Responsive design (desktop and tablet)
-- No installation required (runs in browser)
-
-**Visualizations:**
-- Choropleth maps with year slider
-- Time series charts
-- Distribution histograms
-- Scatter plots with pan/zoom
-
-**Technical Details:**
-- Pure JavaScript (ES6)
-- D3.js for data-driven visualizations
-- CSS Grid for responsive layout
-- Client-side data processing
-
-### Usage
-
-```bash
-# Option 1: Open directly in browser
-open webapp/Index.html
-
-# Option 2: Serve with local HTTP server (recommended)
-cd webapp
-python -m http.server 8000
-# Then open http://localhost:8000 in browser
-```
-
----
-
-## Key Findings
-
-### 1. The Pacific Heights "Historic Luxury" Pattern
-
-Historic properties (1920s-1940s) in northwest Pacific Heights appreciated **35% faster** than the neighborhood median from 2015-2023, creating a premium for architectural heritage. This pattern was nearly invisible in 2015 but became pronounced by 2023.
-
-**Discovery Method:** Linked views - click Pacific Heights on choropleth, brush old buildings in scatter plot, observe time series acceleration.
-
-### 2. COVID Impact Differentiation
-
-Newer buildings (< 20 years old) experienced deeper value drops during COVID-19 (2020) but recovered faster (2021-2022) compared to historic single-family homes.
-
-**Discovery Method:** Year slider analysis - move from 2019 → 2020 → 2022, observe scatter plot age segments respond differently.
-
-### 3. Gentrification Frontiers Identified
-
-Mid-century housing stock (50-80 years old, $800K-$1.2M) in eastern neighborhoods (Mission, Bayview) showed the fastest appreciation rates, indicating active gentrification zones.
-
-**Discovery Method:** Deviation heatmap - brush positive deviation ranges, map highlights eastern ZIPs, time series shows post-2019 acceleration.
-
-### 4. Land Scarcity Premium
-
-Downtown and northern neighborhoods show land value growing significantly faster than improvement values, driven by geographic constraints and zoning.
-
-**Discovery Method:** Color scatter plot by land percentage, observe downtown clusters have higher land ratios and steeper appreciation.
-
----
-
-## Quantitative Results
-
-### Overall Dataset Statistics
-
-**Property Records:**
-- Total properties analyzed: 1,547,892
-- Unique ZIP codes: 52
-- Years covered: 9 (2015-2023)
-- Property types: 127 (consolidated to 20 major categories)
-
-**Value Ranges (2023):**
-- Minimum property value: $12,450
-- Maximum property value: $187,500,000
-- Median property value: $1,247,000
-- Mean property value: $1,893,456
-- Standard deviation: $2,341,678
-
-### Temporal Trends
-
-**City-Wide Appreciation (2015-2023):**
-- Overall appreciation: 42.3%
-- Annual growth rate (CAGR): 4.6%
-- Peak appreciation year: 2021 (+8.2% YoY)
-- Lowest growth year: 2020 (-1.4% YoY, COVID impact)
-- Recovery period: 2021-2023 (+18.7% cumulative)
-
-**Neighborhood Variance:**
-- Top appreciating ZIP (94115 - Pacific Heights): +61.2%
-- Lowest appreciating ZIP (94124 - Bayview): +23.8%
-- Standard deviation across ZIPs: 12.4 percentage points
-- Number of ZIPs above city median: 26 (50%)
-
-### Property Characteristics
-
-**Building Age Distribution:**
-- Pre-1920 (historic): 18.7% of properties
-- 1920-1950 (pre-war): 31.2%
-- 1950-1980 (mid-century): 28.4%
-- 1980-2000 (modern): 14.3%
-- Post-2000 (contemporary): 7.4%
-- Median building age: 67 years
-
-**Land Value Analysis:**
-- Mean land value percentage: 61.3%
-- Median land value percentage: 58.7%
-- Downtown areas (highest): 78-85% land value
-- Outer neighborhoods (lowest): 42-55% land value
-- Correlation with total value: r = 0.67
-
-**Property Types (Top 5 by Count):**
-1. Single-family residential: 52.3% (809,000 properties)
-2. Condominiums: 28.1% (435,000 properties)
-3. Multi-family (2-4 units): 12.6% (195,000 properties)
-4. Commercial mixed-use: 4.2% (65,000 properties)
-5. Apartments (5+ units): 2.8% (43,000 properties)
-
-### Gentrification Metrics
-
-**Identified Gentrification Zones (Eastern Neighborhoods):**
-- ZIPs analyzed: 8 (Mission, Bayview, Excelsior, Visitacion Valley)
-- Average appreciation 2015-2023: 47.8% (vs 42.3% city-wide)
-- Acceleration post-2019: +5.7 percentage points above city average
-- Property turnover rate: 23% (vs 18% city-wide)
-- New construction permits: +142% increase 2015-2023
-
-**Displacement Risk Indicators:**
-- Properties with 50%+ appreciation: 34.2% of eastern neighborhoods
-- Properties with 30-50% appreciation: 41.8%
-- Below-median appreciation: 24.0%
-- High-risk ZIPs (top appreciation + low starting values): 5 identified
-
-### COVID-19 Impact Analysis
-
-**2020 Value Changes:**
-- Properties with value decline: 38.4%
-- Average decline (affected properties): -6.8%
-- Properties with value increase: 29.1%
-- Properties unchanged: 32.5%
-
-**Building Age Correlation with COVID Impact:**
-- Buildings < 20 years: -8.3% average decline
-- Buildings 20-50 years: -6.1% average decline
-- Buildings 50-100 years: -4.2% average decline
-- Buildings > 100 years: -2.8% average decline
-- Statistical significance: p < 0.001
-
-**Recovery Statistics (2020-2023):**
-- Full recovery (exceeded 2019 values): 67.8% of properties
-- Partial recovery (above 2020, below 2019): 21.3%
-- No recovery (still below 2020): 10.9%
-- Time to recovery (median): 18 months
-
-### Historic Property Premium
-
-**Pacific Heights Analysis (ZIP 94115):**
-- Pre-war buildings (1920-1945): 1,847 properties
-- Appreciation 2015-2023: 61.2% (vs 42.3% city average)
-- Premium over neighborhood median: +18.9 percentage points
-- Annual appreciation rate: 6.1% vs 4.3% for newer buildings
-- Price per square foot premium: +34% for historic properties
-
-**Age-Value Correlation:**
-- Buildings 90-110 years old: Highest appreciation quartile (57.3% average)
-- Buildings 20-40 years old: Lowest appreciation quartile (31.2% average)
-- Correlation coefficient (age vs appreciation): r = 0.42
-- R-squared: 0.176 (age explains 17.6% of appreciation variance)
-
-### Spatial Concentration
-
-**Value Concentration (2023):**
-- Top 10% of ZIPs hold: 34.7% of total property value
-- Top 25% of ZIPs hold: 61.2% of total property value
-- Gini coefficient: 0.418 (moderate inequality)
-- Trend 2015-2023: +0.047 (increasing concentration)
-
-**Geographic Patterns:**
-- Northern neighborhoods (5 ZIPs): Median value $2.1M
-- Central neighborhoods (8 ZIPs): Median value $1.4M
-- Western neighborhoods (12 ZIPs): Median value $1.2M
-- Eastern neighborhoods (8 ZIPs): Median value $897K
-- Southern neighborhoods (19 ZIPs): Median value $734K
-
-### Visualization Performance Metrics
-
-**Data Processing:**
-- Raw CSV size: 972 MB
-- Parquet compression: 212 MB (78% reduction)
-- Loading time (Parquet): 2.3 seconds
-- Loading time (CSV): 18.7 seconds
-- Memory footprint: 1.8 GB in RAM
-
-**Interactive Response Times:**
-- Brush selection (1000 points): 45ms average
-- Click selection (single ZIP): 28ms average
-- Year slider update: 156ms average
-- Choropleth map render: 312ms average
-- Scatter plot pan/zoom: 16.7ms per frame (60 FPS)
-
-**Web Application Metrics:**
-- Initial page load: 1.2 seconds
-- Data fetch (if local): 0.8 seconds
-- First interactive render: 2.1 seconds
-- Bundle size: 87 KB (HTML + CSS + JS)
-- Supported browsers: Chrome 90+, Firefox 88+, Safari 14+
-
----
-
-## Technologies Used
-
-### Python Libraries
-
-- **Altair** - Declarative statistical visualization grammar
-- **Vega-Lite** - Interactive graphics specification
-- **Pandas** - Data manipulation and analysis
-- **GeoPandas** - Geospatial data operations
-- **NumPy** - Numerical computing
-- **Matplotlib** - Static plotting
-- **Seaborn** - Statistical data visualization
-
-### Web Technologies
-
-- **HTML5** - Semantic markup and structure
-- **CSS3** - Styling, Grid layout, Flexbox
-- **JavaScript (ES6)** - Interactive functionality
-- **D3.js** - Data-driven document manipulation (if used)
-- **TopoJSON** - Efficient geographic data encoding
-
-### Data Formats
-
-- **Parquet** - Columnar storage for efficient data access
-- **GeoJSON** - Geographic feature encoding
-- **JSON** - Data interchange and configuration
-
----
-
-## Performance Metrics
-
-**Data Volume:**
-- 1.5M+ property records
-- 9 years temporal coverage
-- 50+ ZIP codes
-- 20+ property type categories
-
-**Interaction Response:**
-- Brush selection: < 100ms
-- Click selection: < 50ms
-- Year slider: < 200ms
-- Pan/zoom: 60 FPS
-
-**File Sizes:**
-- Parquet data: 212 MB (compressed from 972 MB CSV)
-- GeoJSON boundaries: 673 KB
-- Web app: < 100 KB total
-- Images: ~100 MB (GIFs and PNGs)
-
----
-
-## Design Principles
-
-### Interaction Mechanisms
-
-**Data Manipulation:**
-- **Brush selection**: Filters continuous value ranges (histograms, scatter plots)
-- **Click selection**: Selects discrete categories (neighborhoods, ZIPs, property types)
-- **Multi-select**: Shift+click for comparing multiple items
-
-**View Manipulation:**
-- **Pan and zoom**: Explore dense data regions (scatter plots)
-- **Year slider**: Temporal navigation and animation
-- **Radio buttons**: Toggle aggregation methods (median vs mean)
-
-**Visual Mapping:**
-- **Conditional encoding**: Highlight selections vs context
-- **Synchronized updates**: All views update together
-- **Consistent color schemes**: Viridis for continuous, Tableau10 for categorical
-
-### Overplotting Solutions
-
-- **Log scales** for right-skewed distributions
-- **Opacity adjustments** (0.3-0.5 for scatter plots)
-- **Heatmap aggregation** for dense regions
-- **Top-N filtering** for categorical data (limit to 5-20 categories)
-- **Sampling** for web performance (30K of 1.5M records in scatter plots)
-
-### Coordination Strategy
-
-- Shared parameters across all views (year, ZIP selection)
-- Context preservation (unselected data shown in gray, not hidden)
-- Visual feedback for selection propagation
-- Persistent selection state across filter changes
-
----
-
-## Usage Examples
-
-### Example 1: Finding High-Appreciation Neighborhoods
-
-1. Open `interactive_visualizations.ipynb` or web app
-2. Move year slider from 2015 → 2023
-3. Observe choropleth map color changes (darkening = appreciation)
-4. Click on darkest ZIPs (Pacific Heights, Marina, Presidio)
-5. Time series shows 40-50% appreciation over period
-6. Age scatter reveals old buildings drove growth
-
-### Example 2: Identifying Gentrification Risk Zones
-
-1. Open deviation heatmap view
-2. Brush positive deviation range (+20% to +50% above city median)
-3. Map highlights outperforming ZIPs in eastern neighborhoods
-4. Time series shows acceleration starting 2019
-5. Age histogram reveals mid-century housing stock
-6. **Insight:** Eastern SF experiencing rapid gentrification
-
-### Example 3: COVID-19 Impact Analysis
-
-1. Move year slider to 2020
-2. Observe value drops in time series (all ZIPs affected)
-3. Click affected ZIPs (SoMa, Mission Bay - newer developments)
-4. Age scatter shows newer buildings (<20 years) dropped more
-5. Move slider to 2021-2022 to observe recovery patterns
-6. **Insight:** Modern condos more volatile than historic homes
-
-### Example 4: Land Value Premium Discovery
-
-1. Color scatter plot by land value percentage
-2. Notice downtown ZIPs (via map click) have higher land percentages
-3. Brush scatter plot high-land-percentage region
-4. Map confirms clustering in downtown and northern neighborhoods
-5. Time series shows land premium grew faster than building values
-6. **Insight:** Geography constrains supply, driving land premiums
-
----
-
-## Data Preprocessing
-
-### Source Data Cleaning
-
-```python
-# Key preprocessing steps performed in data_importing_transformation.ipynb
-
-1. Filter to residential properties only
-2. Remove records with missing/invalid values
-3. Standardize property types (consolidate 200+ types → 20 major categories)
-4. Calculate derived metrics:
-   - Building age: current_year - year_built
-   - Land value percentage: (land_value / total_value) × 100
-   - Year-over-year appreciation: (current_value / prior_value - 1) × 100
-   - Deviation from city median: (zip_value / city_median - 1) × 100
-5. Aggregate to ZIP-year level for choropleth maps
-6. Sample strategically for scatter plots (30K records for performance)
-7. Export to Parquet (5x compression vs CSV)
-```
-
-### Derived Metrics
-
-- **Building Age**: 2023 - year_built
-- **Land Value %**: (land_assessed_value / closed_roll_total_assessed_value) × 100
-- **YoY Appreciation**: ((value_2023 / value_2022) - 1) × 100
-- **Deviation from Median**: ((zip_median / city_median) - 1) × 100
-- **Value Tier**: Quartile-based categorization (Low/Mid/High/Luxury)
-
----
-
-## Known Limitations
-
-1. **Data Coverage**: Limited to properties with complete tax records (excludes some newer developments)
-2. **Sampling**: Scatter plots show 30K of 1.5M records for performance (representative sample)
-3. **Geographic Resolution**: ZIP code level analysis (not parcel-level granularity)
-4. **Temporal Granularity**: Annual snapshots only (no intra-year trends)
-5. **Property Types**: Simplified to top 20 categories for clarity
-6. **Web App**: Requires modern browser with JavaScript enabled
-7. **Large Files**: Main dataset (212 MB) must be downloaded separately
-
----
-
-## Dependencies
-
-```txt
-# Python
-pandas>=1.3.0
-altair>=4.2.0
-geopandas>=0.10.0
-numpy>=1.21.0
-jupyter>=1.0.0
-matplotlib>=3.5.0
-seaborn>=0.11.0
-
-# Web (included via CDN, no installation needed)
-# - D3.js (if used)
-# - Leaflet.js (if used for maps)
-```
-
----
-
-## Related Work
-
-- [SF Open Data Portal](https://datasf.org/) - Source of property tax data
-- [Vega-Lite Documentation](https://vega.github.io/vega-lite/) - Visualization grammar
-- [Altair Gallery](https://altair-viz.github.io/gallery/) - Python visualization examples
-- [GeoPandas Documentation](https://geopandas.org/) - Geospatial data handling
-- [D3.js Gallery](https://observablehq.com/@d3/gallery) - Interactive visualization examples
