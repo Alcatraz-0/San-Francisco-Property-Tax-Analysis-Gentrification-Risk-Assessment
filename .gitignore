@@ -1,14 +1,7 @@
 # Data files (too large for GitHub - use Google Drive)
-data/*.parquet
-data/*.csv
-data/*.pkl
-data/*.json
-*.parquet
-*.csv
 *.pkl
-embeddings_2d.*
 sf_property_data_clean.*
-sf_property_data_geo.geojson
+
 
 # Jupyter Notebook
 .ipynb_checkpoints/
