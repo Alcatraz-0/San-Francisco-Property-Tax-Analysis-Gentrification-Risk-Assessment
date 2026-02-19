@@ -1,12 +1,5 @@
 # Assignment 4: Embedding-Based Interactive Visualization System
 
-## Group Information
-
-**Group Members:**
-- Anand Meena - ameen4@uic.edu
-- Shruthi Kodati - skoda13@uic.edu
-
-
 
 ## Dataset Overview
 
@@ -245,8 +238,7 @@ const sampledData = sampleData(data, currentSampleSize);
 
 
 ## Task 3: Integration with Previous Assignments
-
-We integrated and adapted visualizations from Assignment 3, reusing Vega-Lite specifications and interaction patterns for the value histogram, neighborhood bar chart, spatial choropleth, and value-size scatter plot. These views were modified to respond to embedding selections and to enable bidirectional filtering between the embedding space and detail views.
+integrated and adapted visualizations from Assignment 3, reusing Vega-Lite specifications and interaction patterns for the value histogram, neighborhood bar chart, spatial choropleth, and value-size scatter plot. These views were modified to respond to embedding selections and to enable bidirectional filtering between the embedding space and detail views.
 
 
 
@@ -376,8 +368,6 @@ Simply navigate to the URL above in any modern browser. No installation or setup
 
 **Hypothesis:** Lot constraints in Sunset make small lots more desirable (easier to maintain, lower taxes) despite absolute value differences.
 
-
-
 ## Design Decisions and Rationale
 
 ### Why Embedding-Centered?
@@ -503,10 +493,6 @@ const colorParam = {
 - Parallel coordinates (>1,000 lines causes slowdown)
 - t-SNE with >10,000 points (pre-computed offline)
 
-
-## Collaboration
-
-[Content to be added]
 
 
 
